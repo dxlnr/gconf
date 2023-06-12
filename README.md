@@ -5,7 +5,7 @@ Generic config class in Python.
 ## Usage
 
 A general implementation is shown below
-```
+```python
 from config import Conf
 from misc import create_arg_parser
 
