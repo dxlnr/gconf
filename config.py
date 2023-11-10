@@ -141,3 +141,8 @@ class Conf(object):
     def get_params_docs(self) -> None:
         """Returns the docstring of the class."""
         return self.__doc__
+
+    def __repr__(self):
+        rstr = "Configurations:\n"
+        rstr += "".join(f"  {k}: {self[k]}\n" for k in self.__dataclass_fields__.keys())
+        return rstr
