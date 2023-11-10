@@ -1,10 +1,13 @@
 import copy
-import dataclasses
-from dataclasses import dataclass, field
+import os
+import sys
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-import numpy as np
 import yaml
+
+from misc import create_arg_parser
 
 
 @dataclass
@@ -24,13 +27,15 @@ class Conf(object):
         )
     )
     GENERIC_LIST: List[int] = field(default_factory=lambda: [4, 8, 16, 32, 64])
-    GENERIC_TUPLE: Tuple[int] = field(
-        default_factory=lambda: (32, 64, 128, 256, 512)
-    )
+    GENERIC_TUPLE: Tuple[int] = field(default_factory=lambda: (32, 64, 128, 256, 512))
 
-    def __post_init__(self):
-        # self._reset_params_after_merge()
-        pass
+    def __setitem__(self, key, value):
+        """Sets the value of self[key] from the object or instance of the class."""
+        setattr(self, key, value)
+
+    def __getitem__(self, item):
+        """Gets the value of self[key] from the object or instance of the class."""
+        return getattr(self, item)
 
     def merge_from_file(self, str_obj):
         """Load a config from a YAML string encoding."""
@@ -42,32 +47,11 @@ class Conf(object):
             except yaml.YAMLError as exc:
                 print(exc)
 
-    def __iter__(self):
-        """Create an iterator."""
-        yield self.__dataclass_fields__
-
-    def __setitem__(self, key, value):
-        """Sets the value of self[key] from the object or instance of the class."""
-        setattr(self, key, value)
-
-    def __getitem__(self, key):
-        """Evaluate the value of self[key] by the object or instance of the class."""
-        return getattr(self, key)
-
-    def __str__(self) -> str:
-        """Custom output string."""
-        s = "\n".join(
-            f"  {field.name}: {getattr(self, field.name)!r}"
-            for field in dataclasses.fields(self)
-            if not field.name.startswith("__")
-        )
-        return f"Configurations:\n{s}\n"
-
     def _reset_params_after_merge(self):
         """Adjust parameters after the merge."""
         pass
 
-    def _merge_a_into_self(self, external_d, cfg, key_list: List[str]):
+    def _merge_a_into_self(self, external_d, cfg, key_list: list[str]):
         """Merge a config dictionary a into self, clobbering the
         options in b whenever they are also specified in a.
 
@@ -85,8 +69,8 @@ class Conf(object):
     def _check_and_coerce_conf_value_type(
         replacement,
         original,
-        casts: List[List[Any]] = [[(tuple, list), (list, tuple)]],
-        valid_types: Dict = {tuple, list, dict, str, int, float, bool, type(None)},
+        casts: list[list[Any]] = [[(tuple, list), (list, tuple)]],
+        valid_types: dict = {tuple, list, dict, str, int, float, bool, type(None)},
     ):
         """Checks that `replacement`, which is intended to replace `original` is of
         the right type. The type is correct if it matches exactly or is one of a few
@@ -103,8 +87,10 @@ class Conf(object):
         if replacement_type == original_type:
             return replacement
 
-        if (replacement_type == type(None) and original_type in valid_types) or (
-            original_type == type(None) and replacement_type in valid_types
+        if (
+            isinstance(replacement_type, type(None)) and original_type in valid_types
+        ) or (
+            isinstance(original_type, type(None)) and replacement_type in valid_types
         ):
             return replacement
 
@@ -117,7 +103,7 @@ class Conf(object):
                 return False, None
 
         for cast_pair in casts:
-            for (from_type, to_type) in cast_pair:
+            for from_type, to_type in cast_pair:
                 converted, converted_value = conditional_cast(from_type, to_type)
                 if converted:
                     return converted_value
@@ -125,3 +111,33 @@ class Conf(object):
         raise ValueError(
             f"Type mismatch ({original_type} vs. {replacement_type}) with values ({original} vs. {replacement}) for Conf."
         )
+
+    def save_as_yaml(self, save_dir: str, filename: str = "config.yaml") -> None:
+        """Saves the save as a .yaml file.
+
+        :param save_dir: Specifies the directory where the .yaml file should be saved.
+        :param filename: Self explanatory.
+        """
+        with open(os.path.join(save_dir, filename), "w") as f:
+            yaml.dump(asdict(self), f)
+
+    @classmethod
+    def init(cls):
+        """Initialise class object."""
+        # Parse command line arguments.
+        arg_parser = create_arg_parser()
+        args = arg_parser.parse_args(sys.argv[1:])
+
+        # Exit after showing parameter help.
+        if args.h:
+            print(cls.get_params_docs())
+            exit(0)
+
+        conf = cls()
+        if args.conf is not None:
+            conf.merge_from_file(os.path.join(Path.cwd(), args.conf))
+        return conf
+
+    def get_params_docs(self) -> None:
+        """Returns the docstring of the class."""
+        return self.__doc__
